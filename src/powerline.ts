@@ -347,8 +347,12 @@ export class PowerlineRenderer {
     const results = await Promise.allSettled([
       this.usageProvider.getUsageInfo(hookData.session_id, hookData),
       this.blockProvider.getActiveBlockInfo(hookData),
-      this.todayProvider.getTodayInfo(),
-      this.monthProvider.getMonthInfo(),
+      this.needsSegmentInfo("today")
+        ? this.todayProvider.getTodayInfo()
+        : Promise.resolve(null),
+      this.needsSegmentInfo("month")
+        ? this.monthProvider.getMonthInfo()
+        : Promise.resolve(null),
       this.contextProvider.getContextInfo(hookData, autocompactBuffer),
       this.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
       this.gitService.getGitInfo(
