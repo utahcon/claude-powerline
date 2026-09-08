@@ -38,10 +38,6 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
             enabled: false,
             type: "cost",
             showUnits: true,
-            icon: "calendar",
-            moonStyle: "monochrome",
-            showDaysRemaining: false,
-            showDailyAverage: false,
           },
           block: {
             enabled: false,

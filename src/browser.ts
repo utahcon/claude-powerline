@@ -143,17 +143,8 @@ export {
   formatLongTimeRemaining,
   minutesUntilReset,
   formatCacheTimerElapsed,
-  formatDaysRemaining,
-  formatDailyAverage,
 } from "./utils/formatters";
 export { getBudgetStatus } from "./utils/budget";
-export {
-  getMoonPhaseEmoji,
-  getMoonPhaseMonochrome,
-  getMoonPhaseNerdFont,
-  getMoonPhaseIcon,
-} from "./utils/moonPhase";
-export type { MoonIconStyle } from "./utils/moonPhase";
 
 // --- TUI components ---
 

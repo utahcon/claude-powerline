@@ -81,7 +81,7 @@ const SEGMENT_PART_NAMES = {
   session: ["icon", "label", "cost", "tokens", "budget"],
   block: ["icon", "label", "value", "time", "budget", "bar"],
   today: ["icon", "cost", "label", "budget"],
-  month: ["icon", "cost", "label", "budget", "daysRemaining", "dailyAverage"],
+  month: ["icon", "cost", "label", "budget"],
   weekly: ["icon", "label", "pct", "time", "bar"],
   git: [
     "icon",
