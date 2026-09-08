@@ -26,11 +26,8 @@ import {
   abbreviateFishStyle,
   formatCacheTimerElapsed,
   formatCacheTimerRemaining,
-  formatDaysRemaining,
-  formatDailyAverage,
 } from "../utils/formatters";
 import { resolveBudgetDisplay } from "../utils/budget";
-import { getMoonPhaseIcon } from "../utils/moonPhase";
 import type {
   CacheTimerSegmentConfig,
   OutputStyleSegmentConfig,
@@ -356,6 +353,27 @@ export function collectMetricSegments(
     if (todayStr) {
       segments.push(
         colorize(todayStr, colors.todayFg, reset, colors.todayBold),
+      );
+    }
+  }
+
+  // `month` is opt-in (disabled by default), unlike `today`, so it's gated on
+  // an explicit `enabled` check here rather than bare data presence — the
+  // same pattern `cacheTimer`/`outputStyle` use below — to avoid changing
+  // existing fixed-layout dashboards for users who haven't opted in.
+  const monthEnabled = config.display.lines.some(
+    (line) => line.segments.month?.enabled,
+  );
+  if (monthEnabled && data.monthInfo) {
+    const monthStr = formatMonthSegment(
+      data.monthInfo,
+      sym,
+      config,
+      resolveIconVisibility(config, "month"),
+    );
+    if (monthStr) {
+      segments.push(
+        colorize(monthStr, colors.monthFg, reset, colors.monthBold),
       );
     }
   }
@@ -766,15 +784,6 @@ export function formatTodaySegment(
   return text;
 }
 
-function resolveMonthIcon(sym: SymbolSet, config: PowerlineConfig): string {
-  const monthSegConfig = findConfiguredSegment(config, "month");
-  const useMoonIcon =
-    monthSegConfig?.icon === "moon" && config.display.charset !== "text";
-  return useMoonIcon
-    ? getMoonPhaseIcon(monthSegConfig?.moonStyle ?? "monochrome")
-    : sym.month_cost;
-}
-
 export function formatMonthParts(
   monthInfo: TuiData["monthInfo"] & {},
   sym: SymbolSet,
@@ -788,30 +797,14 @@ export function formatMonthParts(
   );
 
   if (state.suppressAll) {
-    return {
-      icon: "",
-      label: "",
-      cost: "",
-      budget: "",
-      daysRemaining: "",
-      dailyAverage: "",
-    };
+    return { icon: "", label: "", cost: "", budget: "" };
   }
 
-  const monthSegConfig = findConfiguredSegment(config, "month");
-
   return {
-    icon: iconVisible ? resolveMonthIcon(sym, config) : "",
+    icon: iconVisible ? sym.month_cost : "",
     cost: state.showBase ? formatCost(monthInfo.cost) : "",
     label: state.percentageOnly ? "" : "month",
     budget: state.percentText ? ` ${state.percentText}` : "",
-    daysRemaining: monthSegConfig?.showDaysRemaining
-      ? `(${formatDaysRemaining(monthInfo.daysRemaining)})`
-      : "",
-    dailyAverage:
-      monthSegConfig?.showDailyAverage && monthInfo.dailyAverage !== null
-        ? formatDailyAverage(monthInfo.dailyAverage)
-        : "",
   };
 }
 
@@ -828,29 +821,16 @@ export function formatMonthSegment(
   );
   if (state.suppressAll) return "";
 
-  const icon = iconVisible ? resolveMonthIcon(sym, config) : "";
-  const monthSegConfig = findConfiguredSegment(config, "month");
-
-  const appendExtras = (text: string): string => {
-    let result = text;
-    if (monthSegConfig?.showDaysRemaining) {
-      result += ` (${formatDaysRemaining(monthInfo.daysRemaining)})`;
-    }
-    if (monthSegConfig?.showDailyAverage && monthInfo.dailyAverage !== null) {
-      result += ` · ${formatDailyAverage(monthInfo.dailyAverage)}`;
-    }
-    return result;
-  };
+  const icon = iconVisible ? sym.month_cost : "";
 
   if (!state.showBase) {
-    const base = icon ? `${icon} ${state.percentText}` : state.percentText;
-    return appendExtras(base);
+    return icon ? `${icon} ${state.percentText}` : state.percentText;
   }
 
   const costStr = formatCost(monthInfo.cost);
   let text = icon ? `${icon} ${costStr} month` : `${costStr} month`;
   if (state.percentText) text += ` ${state.percentText}`;
-  return appendExtras(text);
+  return text;
 }
 
 function formatMetricsParts(
@@ -1553,25 +1533,11 @@ export function resolveSegments(
 
   // Month
   if (data.monthInfo) {
-    const monthBudgetState = resolveBudgetDisplay(
-      data.monthInfo.cost,
-      data.monthInfo.tokens,
-      config.budget?.month,
-    );
-    const monthWarningThreshold = config.budget?.month?.warningThreshold ?? 80;
-    const monthDefaultFg = pf?.["month"] ?? colors.monthFg;
-    const { fg: monthColor, bold: monthBold } = resolveThresholdStyle(
-      monthBudgetState.percentage ?? -1,
-      monthDefaultFg,
-      colors.monthBold,
-      colors,
-      50,
-      monthWarningThreshold,
-    );
+    const monthColor = pf?.["month"] ?? colors.monthFg;
     result.month = colorizeOrEmpty(
       formatMonthSegment(data.monthInfo, sym, config, iconVisible.month),
       monthColor,
-      monthBold,
+      colors.monthBold,
     );
     addParts(
       result,
@@ -1580,7 +1546,7 @@ export function resolveSegments(
       monthColor,
       reset,
       pf,
-      monthBold,
+      colors.monthBold,
     );
   } else {
     result.month = "";

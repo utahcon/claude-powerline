@@ -11,8 +11,6 @@ export interface BudgetDisplayState {
   showBase: boolean;
   percentText: string;
   percentageOnly: boolean;
-  /** Raw budget usage percentage (0-100, clamped), or null when no budget is configured or computable. */
-  percentage: number | null;
 }
 
 export function calculateBudgetPercentage(
@@ -76,7 +74,6 @@ export function resolveBudgetDisplay(
       showBase: true,
       percentText: "",
       percentageOnly: false,
-      percentage: null,
     };
   }
 
@@ -90,11 +87,8 @@ export function resolveBudgetDisplay(
       showBase: true,
       percentText: "",
       percentageOnly: false,
-      percentage: null,
     };
   }
-
-  const percentage = calculateBudgetPercentage(budgetValue, budget.amount);
 
   if (!showValue && !showPercentage) {
     return {
@@ -102,7 +96,6 @@ export function resolveBudgetDisplay(
       showBase: false,
       percentText: "",
       percentageOnly: false,
-      percentage,
     };
   }
 
@@ -119,6 +112,5 @@ export function resolveBudgetDisplay(
     showBase: showValue,
     percentText,
     percentageOnly: !showValue,
-    percentage,
   };
 }
