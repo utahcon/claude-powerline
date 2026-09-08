@@ -7,6 +7,7 @@ import {
   formatSessionParts,
   formatSessionSegment,
   getSessionSegmentConfig,
+  collectMetricSegments,
 } from "../src/tui/sections";
 import type { TuiData, BoxChars, RenderCtx } from "../src/tui/types";
 import { isValidSegmentRef, SEGMENT_PARTS } from "../src/tui/types";
@@ -122,8 +123,6 @@ function makeTuiData(overrides: Partial<TuiData> = {}): TuiData {
       tokens: null,
       tokenBreakdown: null,
       month: "2026-03",
-      daysRemaining: 14,
-      dailyAverage: 1.38,
     },
     contextInfo: {
       totalTokens: 90000,
@@ -986,7 +985,74 @@ describe("TUI Panel Rendering", () => {
     });
   });
 
-  describe("Month reactive color (TUI resolveSegments)", () => {
+  describe("collectMetricSegments — month (fixed TUI layout)", () => {
+    function dataWithMonth(cost: number | null): TuiData {
+      return makeTuiData({
+        monthInfo: {
+          cost,
+          tokens: null,
+          tokenBreakdown: null,
+          month: "2026-04",
+        },
+      });
+    }
+
+    const monthEnabledConfig: PowerlineConfig = {
+      ...DEFAULT_CONFIG,
+      display: {
+        ...DEFAULT_CONFIG.display,
+        lines: [
+          {
+            segments: {
+              ...DEFAULT_CONFIG.display.lines[0]!.segments,
+              month: { enabled: true, type: "cost", showUnits: true },
+            },
+          },
+        ],
+      },
+    };
+
+    it("includes month when enabled and formattable", () => {
+      const segments = collectMetricSegments(
+        dataWithMonth(20),
+        SYMBOLS,
+        monthEnabledConfig,
+        "",
+        PLAIN_COLORS,
+      );
+      expect(segments.some((s) => s.includes("month"))).toBe(true);
+    });
+
+    it("excludes month when budget suppresses all output", () => {
+      const suppressedConfig: PowerlineConfig = {
+        ...monthEnabledConfig,
+        budget: {
+          month: { amount: 50, showValue: false, showPercentage: false },
+        },
+      };
+      const segments = collectMetricSegments(
+        dataWithMonth(20),
+        SYMBOLS,
+        suppressedConfig,
+        "",
+        PLAIN_COLORS,
+      );
+      expect(segments.some((s) => s.includes("month"))).toBe(false);
+    });
+
+    it("excludes month when not enabled, even with monthInfo present", () => {
+      const segments = collectMetricSegments(
+        dataWithMonth(20),
+        SYMBOLS,
+        DEFAULT_CONFIG,
+        "",
+        PLAIN_COLORS,
+      );
+      expect(segments.some((s) => s.includes("month"))).toBe(false);
+    });
+  });
+
+  describe("Month color (TUI resolveSegments)", () => {
     const monthColors: PowerlineColors = {
       ...PLAIN_COLORS,
       monthFg: "base-fg",
@@ -1005,8 +1071,6 @@ describe("TUI Panel Rendering", () => {
           tokens: null,
           tokenBreakdown: null,
           month: "2026-04",
-          daysRemaining: 12,
-          dailyAverage: null,
         },
       });
     }
@@ -1028,25 +1092,13 @@ describe("TUI Panel Rendering", () => {
       };
     }
 
-    it("stays at the base color under 50%", () => {
-      const data = monthDataAt(20);
-      const resolved = resolveSegments(data, ctxFor(data));
-      expect(resolved.data.month).toContain("base-fg");
-      expect(resolved.data["month.cost"]).toContain("base-fg");
-    });
-
-    it("switches to the warning color between 50% and the threshold", () => {
-      const data = monthDataAt(60);
-      const resolved = resolveSegments(data, ctxFor(data));
-      expect(resolved.data.month).toContain("warning-fg");
-      expect(resolved.data["month.cost"]).toContain("warning-fg");
-    });
-
-    it("switches to the critical color at or above the warning threshold", () => {
-      const data = monthDataAt(90);
-      const resolved = resolveSegments(data, ctxFor(data));
-      expect(resolved.data.month).toContain("critical-fg");
-      expect(resolved.data["month.cost"]).toContain("critical-fg");
+    it("stays at the base color regardless of budget percentage", () => {
+      for (const cost of [20, 60, 90]) {
+        const data = monthDataAt(cost);
+        const resolved = resolveSegments(data, ctxFor(data));
+        expect(resolved.data.month).toContain("base-fg");
+        expect(resolved.data["month.cost"]).toContain("base-fg");
+      }
     });
 
     it("stays at the base color when no budget amount is configured", () => {
