@@ -243,8 +243,7 @@ The two upstream options are independent. `showUpstream` controls the branch nam
 ```json
 "month": {
   "enabled": true,
-  "type": "cost",
-  "icon": "calendar"
+  "type": "cost"
 }
 ```
 
@@ -252,19 +251,12 @@ The two upstream options are independent. `showUpstream` controls the branch nam
 
 - `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
 - `showUnits`: Show the trailing `tokens` unit when `type` is `tokens` or `both` (default: `true`). Set to `false` to render `◫ $123.45 (4.4M)` instead of `◫ $123.45 (4.4M tokens)`. Only applies to the powerline/capsule/minimal styles; the `tui` style already renders tokens without a suffix
-- `icon`: Leading icon style - `calendar` (default, static `◫`) | `moon` (today's real lunar phase). `moon` is ignored under `charset: "text"`, which always falls back to the ASCII symbol
-- `moonStyle`: Rendering style for `icon: "moon"` (default: `"monochrome"`):
-  - `"monochrome"`: plain-Unicode 4-phase indicator (`○◖●◗`) that takes on the segment's theme color, like every other icon
-  - `"emoji"`: full-color 8-phase emoji (`🌑🌒🌓🌔🌕🌖🌗🌘`); ignores theme color (fixed palette)
-  - `"nerd-font"`: Weather Icons' 28-phase glyph set, theme-colored. **Requires a Nerd Font–patched terminal font** — this can't be detected at runtime, so only set this if you already know you have one, the same way you'd opt into `style: "powerline"`/`"capsule"`
-- `showDaysRemaining`: Append the number of days left in the current month in parentheses next to the budget percentage, e.g. `◫ $23.45 9% (12d)` (default: `false`)
-- `showDailyAverage`: Append the average cost per day so far this month, e.g. `◫ $23.45 9% (12d) · $1.56/day` (default: `false`)
 
 Opt-in (`enabled: false` by default). Resets on the 1st of each month.
 
-**Color reacts to spend by default.** `budget.month.amount` defaults to `500`, so as soon as you enable the segment its color shifts with usage: the theme's normal `month` color under 50% of budget, the warning color (yellow-ish) from 50% up to `warningThreshold` (default 80%), and the critical color (red-ish) at or above it — with no other config needed. Set `budget.month.amount` to your own limit, or `0`/omit the whole `month` key under `budget` to disable the percentage and keep a static color (see Budget Configuration below).
+`budget.month.amount` defaults to `500` (like `today`'s default of `50`) unless overridden. Set it to `0` to disable the percentage — omitting the `month` key entirely does **not** disable it, since the default still applies (see Budget Configuration below).
 
-**Symbols:** `◫` Month (unicode, calendar icon) &#8226; `○◖●◗` Month (unicode, moon icon, `monochrome` style — cycles with the real lunar phase) &#8226; `🌑🌒🌓🌔🌕🌖🌗🌘` Month (unicode, moon icon, `emoji` style) &#8226; `Mo` Month (text)
+**Symbols:** `◫` Month (unicode) &#8226; `Mo` Month (text)
 
 </details>
 
@@ -933,7 +925,7 @@ Use `segment.part` to place individual pieces of a segment into separate cells w
 | `session` | `icon`, `label`, `cost`, `tokens`, `budget` |
 | `block` | `icon`, `label`, `value`, `time`, `budget`, `bar` |
 | `today` | `icon`, `cost`, `label`, `budget` |
-| `month` | `icon`, `cost`, `label`, `budget`, `daysRemaining`, `dailyAverage` |
+| `month` | `icon`, `cost`, `label`, `budget` |
 | `weekly` | `icon`, `label`, `pct`, `time`, `bar` |
 | `git` | `icon`, `headVal`, `branch`, `status`, `ahead`, `behind`, `working`, `worktree`, `head` |
 | `context` | `icon`, `label`, `bar`, `pct`, `tokens` |
