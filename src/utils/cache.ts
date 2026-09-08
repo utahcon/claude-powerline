@@ -20,13 +20,24 @@ export interface CacheEntry<T> {
 }
 
 export class CacheManager {
-  private static readonly CACHE_DIR = path.join(
-    homedir(),
-    ".claude",
-    "powerline",
-  );
-  private static readonly USAGE_CACHE_DIR = path.join(this.CACHE_DIR, "usage");
-  private static readonly LOCKS_DIR = path.join(this.CACHE_DIR, "locks");
+  /**
+   * Resolved on every access (not cached at class-load time) so tests can
+   * override it via `CLAUDE_POWERLINE_CACHE_DIR` before the day-usage cache
+   * (permanent, unlike the mtime-keyed caches) ever touches a real user's
+   * `~/.claude/powerline` directory.
+   */
+  private static get CACHE_DIR(): string {
+    return (
+      globalThis.process?.env?.CLAUDE_POWERLINE_CACHE_DIR ??
+      path.join(homedir(), ".claude", "powerline")
+    );
+  }
+  private static get USAGE_CACHE_DIR(): string {
+    return path.join(this.CACHE_DIR, "usage");
+  }
+  private static get LOCKS_DIR(): string {
+    return path.join(this.CACHE_DIR, "locks");
+  }
 
   private static isLocked(name: string): boolean {
     const lockFile = path.join(this.LOCKS_DIR, name);
@@ -122,7 +133,7 @@ export class CacheManager {
   }
 
   static async getUsageCache(
-    cacheType: "today" | "month" | "block" | "pricing",
+    cacheType: "block" | "pricing",
     latestMtime?: number,
   ): Promise<unknown> {
     const MAX_RETRIES = 3;
@@ -183,7 +194,7 @@ export class CacheManager {
   }
 
   static async setUsageCache(
-    cacheType: "today" | "month" | "block" | "pricing",
+    cacheType: "block" | "pricing",
     data: unknown,
     latestMtime?: number,
   ): Promise<void> {
@@ -208,6 +219,80 @@ export class CacheManager {
       debug(`[CACHE-SET] ${cacheType} disk cache stored`);
     } catch (error) {
       debug(`Failed to save ${cacheType} usage cache:`, error);
+    } finally {
+      await this.releaseLock(lockName);
+    }
+  }
+
+  /**
+   * A completed calendar day's usage entries can never change (transcripts
+   * are appended with real-time timestamps), so unlike `getUsageCache` this
+   * cache has no mtime/staleness check at all: a `day-<date>.json` file's
+   * mere presence means it is permanently valid. Callers must never write
+   * the current (still-accumulating) day through this method.
+   */
+  static async getDayUsageCache(dateStr: string): Promise<unknown> {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 75;
+    const FILE_ENCODING = "utf-8";
+
+    await this.ensureCacheDirectories();
+    const cachePath = path.join(this.USAGE_CACHE_DIR, `day-${dateStr}.json`);
+    const lockName = `day-${dateStr}.usage.lock`;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const isCurrentlyLocked = this.isLocked(lockName);
+      if (isCurrentlyLocked) {
+        debug(`Day cache for ${dateStr} is locked, waiting...`);
+        await setTimeout(RETRY_DELAY_MS);
+        continue;
+      }
+
+      try {
+        const content = await fs.promises.readFile(cachePath, FILE_ENCODING);
+        const cached: CacheEntry<unknown> = JSON.parse(content);
+        debug(`[CACHE-HIT] day ${dateStr} disk cache: found`);
+        return this.deserializeDates(cached.data);
+      } catch (error) {
+        if ((error as ErrnoError).code === "ENOENT") {
+          debug(`No day usage cache found for ${dateStr}`);
+          return null;
+        }
+        const attemptNumber = attempt + 1;
+        debug(
+          `Attempt ${attemptNumber} failed to read day ${dateStr} cache: ${(error as Error).message}. Retrying...`,
+        );
+        await setTimeout(RETRY_DELAY_MS);
+      }
+    }
+
+    debug(`Failed to read day ${dateStr} cache after ${MAX_RETRIES} attempts.`);
+    return null;
+  }
+
+  static async setDayUsageCache(dateStr: string, data: unknown): Promise<void> {
+    const lockName = `day-${dateStr}.usage.lock`;
+    const lockAcquired = await this.acquireLock(lockName);
+    if (!lockAcquired) {
+      debug(`Could not acquire lock to set day usage cache for ${dateStr}`);
+      return;
+    }
+
+    try {
+      await this.ensureCacheDirectories();
+      const cachePath = path.join(this.USAGE_CACHE_DIR, `day-${dateStr}.json`);
+      const cacheEntry: CacheEntry<unknown> = {
+        data,
+        timestamp: Date.now(),
+      };
+      await fs.promises.writeFile(
+        cachePath,
+        JSON.stringify(cacheEntry),
+        "utf-8",
+      );
+      debug(`[CACHE-SET] day ${dateStr} disk cache stored`);
+    } catch (error) {
+      debug(`Failed to save day ${dateStr} usage cache:`, error);
     } finally {
       await this.releaseLock(lockName);
     }
