@@ -117,6 +117,7 @@ export CLAUDE_POWERLINE_THEME=dark
 export CLAUDE_POWERLINE_STYLE=powerline
 export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
 export CLAUDE_POWERLINE_DEBUG=1  # Enable debug logging
+export CLAUDE_POWERLINE_CACHE_DIR=/path/to/cache  # Usage cache location (default: ~/.claude/powerline)
 ```
 
 </details>

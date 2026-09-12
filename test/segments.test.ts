@@ -11,6 +11,7 @@ import {
   loadEntriesFromProjects,
   type ClaudeHookData,
 } from "../src/utils/claude";
+import { CacheManager } from "../src/utils/cache";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -193,6 +194,155 @@ describe("Segment Time Logic", () => {
       const expectedMonthStr = `${year}-${month}`;
 
       expect(monthInfo.month).toBe(expectedMonthStr);
+    });
+  });
+
+  describe("Usage Window Cache", () => {
+    const now = new Date(2026, 8, 12, 12, 0, 0);
+    const yesterdayEntry = usageEntry(new Date(2026, 8, 11, 9, 0, 0), 10);
+    const todayEntry = usageEntry(new Date(2026, 8, 12, 9, 0, 0), 1);
+    let mtimeSpy: jest.SpyInstance;
+
+    function usageEntry(timestamp: Date, costUSD: number) {
+      return {
+        timestamp,
+        message: {
+          usage: { input_tokens: 100, output_tokens: 10 },
+          model: "claude-3-5-sonnet",
+        },
+        costUSD,
+        raw: {},
+      };
+    }
+
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const staleUsage = {
+      cost: 999,
+      entryCount: 1,
+      tokenBreakdown: { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
+    };
+
+    function scansIncludingYesterday() {
+      return mockLoadEntries.mock.calls.filter((call) =>
+        call[0]!(yesterdayEntry as any),
+      ).length;
+    }
+
+    beforeEach(() => {
+      // Only Date is frozen: the cache lock retry loop awaits real timers.
+      jest.useFakeTimers({
+        now,
+        doNotFake: [
+          "setTimeout",
+          "clearTimeout",
+          "setInterval",
+          "clearInterval",
+          "setImmediate",
+          "clearImmediate",
+          "nextTick",
+          "queueMicrotask",
+        ],
+      });
+      mtimeSpy = jest
+        .spyOn(CacheManager, "getLatestTranscriptMtime")
+        .mockResolvedValue(1000);
+      mockLoadEntries.mockResolvedValue([yesterdayEntry, todayEntry] as any);
+    });
+
+    afterEach(() => {
+      mtimeSpy.mockRestore();
+      jest.useRealTimers();
+    });
+
+    it("sums completed days into month but keeps today to the current day", async () => {
+      const monthInfo = await new MonthProvider().getMonthInfo();
+      const todayInfo = await new TodayProvider().getTodayInfo();
+
+      expect(monthInfo.cost).toBe(11);
+      expect(todayInfo.cost).toBe(1);
+    });
+
+    it("reuses today's total until a transcript changes", async () => {
+      const todayProvider = new TodayProvider();
+      await todayProvider.getTodayInfo();
+      await todayProvider.getTodayInfo();
+      expect(mockLoadEntries).toHaveBeenCalledTimes(1);
+
+      mtimeSpy.mockResolvedValue(2000);
+      await todayProvider.getTodayInfo();
+      expect(mockLoadEntries).toHaveBeenCalledTimes(2);
+    });
+
+    it("shares one scan between concurrent today and month renders", async () => {
+      await new MonthProvider().getMonthInfo();
+      mockLoadEntries.mockClear();
+      mtimeSpy.mockResolvedValue(2000);
+
+      await Promise.all([
+        new MonthProvider().getMonthInfo(),
+        new TodayProvider().getTodayInfo(),
+      ]);
+
+      expect(mockLoadEntries).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-parse completed days on later renders", async () => {
+      const monthProvider = new MonthProvider();
+      await monthProvider.getMonthInfo();
+      expect(scansIncludingYesterday()).toBe(1);
+
+      mtimeSpy.mockResolvedValue(2000);
+      const monthInfo = await monthProvider.getMonthInfo();
+
+      expect(scansIncludingYesterday()).toBe(1);
+      expect(monthInfo.cost).toBe(11);
+    });
+
+    it("rebuilds a completed day that was cached under another time zone", async () => {
+      await CacheManager.setDayUsageCache(
+        "2026-09-11",
+        staleUsage,
+        "Not/ThisZone",
+      );
+
+      const monthInfo = await new MonthProvider().getMonthInfo();
+
+      expect(monthInfo.cost).toBe(11);
+      expect(scansIncludingYesterday()).toBe(1);
+    });
+
+    it("does not trust a mid-day snapshot as the completed day", async () => {
+      await CacheManager.setDayUsageCache(
+        "2026-09-11",
+        staleUsage,
+        timeZone,
+        500,
+      );
+
+      const monthInfo = await new MonthProvider().getMonthInfo();
+
+      expect(monthInfo.cost).toBe(11);
+    });
+
+    it("prunes day caches older than the retention window once a day completes", async () => {
+      await CacheManager.setDayUsageCache(
+        "2026-01-01",
+        staleUsage,
+        timeZone,
+        1,
+      );
+      expect(
+        await CacheManager.getDayUsageCache("2026-01-01", timeZone, 1),
+      ).not.toBeNull();
+
+      await new MonthProvider().getMonthInfo();
+
+      expect(
+        await CacheManager.getDayUsageCache("2026-01-01", timeZone, 1),
+      ).toBeNull();
+      expect(
+        await CacheManager.getDayUsageCache("2026-09-11", timeZone),
+      ).not.toBeNull();
     });
   });
 

@@ -37,6 +37,7 @@ import {
   hexTo256Ansi,
   hexColorDistance,
 } from "./utils/colors";
+import { DEFAULT_CONFIG } from "./config/defaults";
 import { getColorSupport } from "./utils/color-support";
 import { getTheme } from "./themes";
 import {
@@ -162,6 +163,24 @@ export class PowerlineRenderer {
     return this.config.display.lines.some(
       (line) => line.segments[segmentType]?.enabled,
     );
+  }
+
+  /**
+   * The TUI's built-in layout shows every segment it has data for and ignores
+   * `display.lines`, while a user-supplied `lines` array replaces the default
+   * lines wholesale. A segment no line mentions therefore keeps its default
+   * instead of silently disappearing from the panel.
+   */
+  private tuiWantsSegment(segmentType: keyof LineConfig["segments"]): boolean {
+    const enabledIn = (lines: LineConfig[]) =>
+      lines
+        .map((line) => line.segments[segmentType])
+        .filter((config) => config !== undefined)
+        .map((config) => Boolean(config.enabled));
+
+    const configured = enabledIn(this.config.display.lines);
+    if (configured.length > 0) return configured.includes(true);
+    return enabledIn(DEFAULT_CONFIG.display.lines).includes(true);
   }
 
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
@@ -347,10 +366,10 @@ export class PowerlineRenderer {
     const results = await Promise.allSettled([
       this.usageProvider.getUsageInfo(hookData.session_id, hookData),
       this.blockProvider.getActiveBlockInfo(hookData),
-      this.needsSegmentInfo("today")
+      this.tuiWantsSegment("today")
         ? this.todayProvider.getTodayInfo()
         : Promise.resolve(null),
-      this.needsSegmentInfo("month")
+      this.tuiWantsSegment("month")
         ? this.monthProvider.getMonthInfo()
         : Promise.resolve(null),
       this.contextProvider.getContextInfo(hookData, autocompactBuffer),
